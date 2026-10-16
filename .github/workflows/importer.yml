@@ -1,0 +1,23 @@
+name: Installer Comparateur depuis ZIP
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Comparateur_Android_Pret_GitHub.zip'
+permissions:
+  contents: write
+jobs:
+  installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decompresser le projet
+        run: |
+          unzip -o Comparateur_Android_Pret_GitHub.zip -d .
+          rm Comparateur_Android_Pret_GitHub.zip
+      - name: Enregistrer le projet
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet || (git commit -m 'Installer Comparateur Android' && git push)
