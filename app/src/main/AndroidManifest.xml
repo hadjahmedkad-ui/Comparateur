@@ -3,6 +3,7 @@
 
     <application
         android:allowBackup="true"
+        android:icon="@drawable/comparateur_icon"
         android:label="Comparateur"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
 
