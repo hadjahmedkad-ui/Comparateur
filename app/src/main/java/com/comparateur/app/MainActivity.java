@@ -2,65 +2,117 @@ package com.comparateur.app;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.WebSettings;
 import android.content.Intent;
-import android.view.View;
-import android.widget.Button;
-import android.widget.LinearLayout;
-import android.widget.TextView;
+import android.net.Uri;
+import android.print.PrintManager;
+import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
+import android.webkit.ValueCallback;
 
 public class MainActivity extends Activity {
-    private static final int PICK_PDF = 100;
-    private int selected = 0;
-    private TextView status;
+    private WebView web;
+    private ValueCallback<Uri[]> pendingFiles;
+    private static final int FILE_REQUEST = 1001;
 
     @Override
-    protected void onCreate(Bundle state) {
-        super.onCreate(state);
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
 
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(35, 55, 35, 35);
+        web = new WebView(this);
+        setContentView(web);
 
-        TextView title = new TextView(this);
-        title.setText("Comparateur PDF");
-        title.setTextSize(26);
-        layout.addView(title);
+        WebSettings settings = web.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
+        settings.setDomStorageEnabled(true);
 
-        status = new TextView(this);
-        status.setText("Aucun PDF sélectionné");
-        status.setTextSize(17);
-        layout.addView(status);
+        web.addJavascriptInterface(new Object() {
+            @JavascriptInterface
+            public void printPage() {
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    PrintManager manager =
+                        (PrintManager) getSystemService(Context.PRINT_SERVICE);
 
-        Button first = new Button(this);
-        first.setText("Choisir PDF 1");
-        layout.addView(first);
+                    manager.print(
+                        "Comparateur",
+                        web.createPrintDocumentAdapter("Comparateur"),
+                        null
+                    );
+                });
+            }
+        }, "AndroidPrint");
 
-        Button second = new Button(this);
-        second.setText("Choisir PDF 2");
-        layout.addView(second);
+        web.setWebViewClient(new WebViewClient());
 
-        first.setOnClickListener(v -> choosePdf(1));
-        second.setOnClickListener(v -> choosePdf(2));
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(
+                WebView view,
+                ValueCallback<Uri[]> callback,
+                FileChooserParams params
+            ) {
+                if (pendingFiles != null) {
+                    pendingFiles.onReceiveValue(null);
+                }
 
-        setContentView(layout);
-    }
+                pendingFiles = callback;
 
-    private void choosePdf(int number) {
-        selected = number;
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        intent.setType("application/pdf");
-        intent.addCategory(Intent.CATEGORY_OPENABLE);
-        startActivityForResult(intent, PICK_PDF);
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                intent.setType("application/pdf");
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+
+                startActivityForResult(intent, FILE_REQUEST);
+                return true;
+            }
+        });
+
+        web.loadUrl("file:///android_asset/comparateur.html");
     }
 
     @Override
-    protected void onActivityResult(int request, int result, Intent data) {
-        super.onActivityResult(request, result, data);
+    protected void onActivityResult(
+        int requestCode,
+        int resultCode,
+        Intent data
+    ) {
+        super.onActivityResult(requestCode, resultCode, data);
 
-        if (request == PICK_PDF && result == RESULT_OK
-                && data != null) {
-            status.setText("PDF " + selected + " sélectionné : "
-                    + data.getData().getLastPathSegment());
+        if (requestCode != FILE_REQUEST || pendingFiles == null) return;
+
+        Uri[] selected = null;
+
+        if (resultCode == RESULT_OK && data != null) {
+            if (data.getClipData() != null) {
+                int count = data.getClipData().getItemCount();
+                selected = new Uri[count];
+
+                for (int i = 0; i < count; i++) {
+                    selected[i] = data.getClipData()
+                        .getItemAt(i).getUri();
+                }
+            } else if (data.getData() != null) {
+                selected = new Uri[]{data.getData()};
+            }
+        }
+
+        pendingFiles.onReceiveValue(selected);
+        pendingFiles = null;
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (web.canGoBack()) {
+            web.goBack();
+        } else {
+            super.onBackPressed();
         }
     }
 }
